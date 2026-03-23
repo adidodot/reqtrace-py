@@ -1,5 +1,9 @@
 import json
+import os
+import select
+import sys
 import time
+import threading
 from typing import Any
 
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -8,8 +12,9 @@ from starlette.responses import Response
 from starlette.types import ASGIApp
 
 from .config import ReqTraceConfig
-from .formatter import format_log
-from .writer import write_log
+from .differ import SnapshotStore, compute_diff
+from .formatter import format_log, format_diff
+from .writer import write_log, write_diff
 
 
 class ReqTraceMiddleware(BaseHTTPMiddleware):
@@ -26,23 +31,23 @@ class ReqTraceMiddleware(BaseHTTPMiddleware):
     def __init__(self, app: ASGIApp, config: ReqTraceConfig) -> None:
         super().__init__(app)
         self.config = config
+        self._snapshots = SnapshotStore()
+
+        if config.clear_key and config.use_terminal:
+            self._start_clear_listener(config.clear_key)
 
     async def dispatch(self, request: Request, call_next) -> Response:  # type: ignore[override]
         if not self.config.enabled:
             return await call_next(request)
 
-        # --- capture request body ---
         request_body = await self._read_request_body(request)
 
-        # --- call the actual route ---
         start = time.perf_counter()
         response = await call_next(request)
         latency_ms = (time.perf_counter() - start) * 1000
 
-        # --- capture response body ---
         response_body, response = await self._read_response_body(response)
 
-        # --- dispatch to configured outputs ---
         method: str = request.method
         url: str = str(request.url.path)
         status_code: int = response.status_code
@@ -73,30 +78,67 @@ class ReqTraceMiddleware(BaseHTTPMiddleware):
                 response_body=response_body,
             )
 
+        if self.config.diff and response_body is not None:
+            if self._snapshots.has(method, url):
+                old_body = self._snapshots.get(method, url)
+                diff_result = compute_diff(method, url, old_body, response_body)
+
+                if self.config.use_terminal:
+                    print(format_diff(diff_result))
+
+                if self.config.use_file and self.config.file_path is not None:
+                    write_diff(
+                        file_path=self.config.file_path,
+                        file_format=self.config.file_format,
+                        diff_result=diff_result,
+                    )
+
+            self._snapshots.set(method, url, response_body)
+
         return response
+
+    # ------------------------------------------------------------------
+    # clear terminal listener
+    # ------------------------------------------------------------------
+
+    def _start_clear_listener(self, key: str) -> None:
+        """
+        Jalankan background thread yang listen input keyboard.
+        Menggunakan polling non-blocking agar CTRL+C tetap berfungsi.
+        """
+
+        def _listen() -> None:
+            while True:
+                try:
+                    # polling setiap 100ms — tidak memblokir stdin
+                    if _key_available():
+                        char = _read_single_char_nonblock()
+                        if char and char.lower() == key.lower():
+                            _clear_terminal()
+                    else:
+                        time.sleep(0.1)
+                except Exception:
+                    break
+
+        thread = threading.Thread(target=_listen, daemon=True)
+        thread.start()
 
     # ------------------------------------------------------------------
     # helpers
     # ------------------------------------------------------------------
 
     async def _read_request_body(self, request: Request) -> Any:
-        """Read and parse request body without consuming the stream."""
         raw: bytes = b""
         try:
             raw = await request.body()
             if not raw:
                 return None
-            # re-inject body so the route handler can still read it
             request._body = raw  # type: ignore[attr-defined]
             return json.loads(raw)
         except Exception:
             return raw.decode("utf-8", errors="replace") if raw else None
 
     async def _read_response_body(self, response: Response) -> tuple[Any, Response]:
-        """
-        Read the response body stream, then rebuild a fresh Response
-        so the client still receives the full body.
-        """
         body_chunks: list[bytes] = []
         async for chunk in response.body_iterator:  # type: ignore[attr-defined]
             body_chunks.append(chunk if isinstance(chunk, bytes) else chunk.encode())
@@ -109,7 +151,6 @@ class ReqTraceMiddleware(BaseHTTPMiddleware):
         except Exception:
             parsed = raw.decode("utf-8", errors="replace") if raw else None
 
-        # rebuild a fresh response with the same status/headers/body
         new_response = Response(
             content=raw,
             status_code=response.status_code,
@@ -118,3 +159,43 @@ class ReqTraceMiddleware(BaseHTTPMiddleware):
         )
 
         return parsed, new_response
+
+
+# ------------------------------------------------------------------
+# Terminal utilities
+# ------------------------------------------------------------------
+
+
+def _clear_terminal() -> None:
+    """Clear terminal — cross-platform."""
+    if sys.platform == "win32":
+        os.system("cls")
+    else:
+        os.system("clear")
+
+
+def _key_available() -> bool:
+    """
+    Cek apakah ada input keyboard tersedia tanpa memblokir.
+    Cross-platform: Windows (msvcrt.kbhit) dan Unix (select).
+    """
+    if sys.platform == "win32":
+        import msvcrt
+
+        return bool(msvcrt.kbhit())
+    else:
+        readable, _, _ = select.select([sys.stdin], [], [], 0)
+        return bool(readable)
+
+
+def _read_single_char_nonblock() -> str:
+    """
+    Baca satu karakter yang sudah tersedia di buffer.
+    Hanya dipanggil setelah _key_available() mengembalikan True.
+    """
+    if sys.platform == "win32":
+        import msvcrt
+
+        return msvcrt.getwch()
+    else:
+        return sys.stdin.read(1)

@@ -1,5 +1,5 @@
 """
-Contoh penggunaan reqtrace dengan FastAPI.
+Contoh penggunaan reqtrace v0.2.0 dengan FastAPI.
 
 Jalankan dengan:
     uvicorn examples.fastapi_example:app --reload
@@ -8,6 +8,13 @@ Lalu coba endpoint:
     GET  http://localhost:8000/users
     POST http://localhost:8000/users   body: {"name": "Diz", "email": "diz@mail.com"}
     GET  http://localhost:8000/users/99   (trigger 404)
+
+Untuk melihat diff:
+    Panggil GET /users dua kali — reqtrace akan otomatis menampilkan diff
+    jika ada perubahan response.
+
+Keyboard shortcut:
+    Tekan 'c' di terminal untuk clear output.
 """
 
 from fastapi import FastAPI, HTTPException
@@ -18,17 +25,20 @@ from reqtrace.middleware import ReqTraceMiddleware
 
 
 # -------------------------------------------------------------------
-# Pilih salah satu konfigurasi di bawah untuk mencoba output mode:
+# Pilih salah satu konfigurasi:
 # -------------------------------------------------------------------
 
-# Mode 1: terminal only (default)
-rt = ReqTrace(output="terminal")
+# Mode 1: terminal + auto-diff (default contoh ini)
+rt = ReqTrace(output="terminal", diff=True)
 
 # Mode 2: file only
 # rt = ReqTrace(output="file", file_path="logs/trace.json")
 
-# Mode 3: both
-# rt = ReqTrace(output="both", file_path="logs/trace.txt", file_format="txt")
+# Mode 3: both + diff
+# rt = ReqTrace(output="both", file_path="logs/trace.json", diff=True)
+
+# Mode 4: nonaktifkan clear key
+# rt = ReqTrace(output="terminal", diff=True, clear_key=None)
 
 # -------------------------------------------------------------------
 

@@ -116,3 +116,58 @@ def format_log(
     lines.append(_colorize("└" + "─" * 62, Color.GRAY))
 
     return "\n".join(lines)
+
+
+def format_diff(diff_result: "DiffResult") -> str:  # type: ignore[name-defined]
+    """
+    Build a colorized diff output string for terminal.
+    Dipanggil setelah compute_diff().
+    """
+    from .differ import DiffResult
+
+    if not diff_result.has_changes:
+        border = _colorize("─" * 52, Color.GRAY)
+        lines = [
+            "",
+            _colorize("┌─ DIFF ", Color.GRAY)
+            + _colorize(f"{diff_result.method} {diff_result.url} ", Color.CYAN)
+            + border,
+            f"  {_colorize('No changes detected', Color.GREEN)}",
+            _colorize("└" + "─" * 62, Color.GRAY),
+        ]
+        return "\n".join(lines)
+
+    border = _colorize("─" * 52, Color.GRAY)
+    label = _colorize(
+        f"{diff_result.method} {diff_result.url} ", Color.CYAN, Color.BOLD
+    )
+    summary = _colorize(
+        f"+{len(diff_result.added)}  -{len(diff_result.removed)}  ~{len(diff_result.changed)}",
+        Color.GRAY,
+    )
+
+    lines = [
+        "",
+        _colorize("┌─ DIFF ", Color.GRAY) + label + border,
+        f"  {summary}",
+    ]
+
+    for entry in diff_result.entries:
+        if entry.symbol == "+":
+            sym = _colorize("+", Color.GREEN, Color.BOLD)
+            val = _colorize(repr(entry.new_value), Color.GREEN)
+            lines.append(f"  {sym} {_colorize(entry.path, Color.WHITE):<40}  {val}")
+        elif entry.symbol == "-":
+            sym = _colorize("-", Color.RED, Color.BOLD)
+            val = _colorize(repr(entry.old_value), Color.RED)
+            lines.append(f"  {sym} {_colorize(entry.path, Color.WHITE):<40}  {val}")
+        else:
+            sym = _colorize("~", Color.YELLOW, Color.BOLD)
+            old = _colorize(repr(entry.old_value), Color.RED)
+            new = _colorize(repr(entry.new_value), Color.GREEN)
+            lines.append(
+                f"  {sym} {_colorize(entry.path, Color.WHITE):<40}  {old} → {new}"
+            )
+
+    lines.append(_colorize("└" + "─" * 62, Color.GRAY))
+    return "\n".join(lines)

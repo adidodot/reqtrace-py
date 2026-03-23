@@ -100,3 +100,52 @@ def _write_txt(file_path: str, record: dict) -> None:
 
     with open(file_path, "a", encoding="utf-8") as f:
         f.write(entry)
+
+
+def write_diff(
+    file_path: str,
+    file_format: FileFormat,
+    diff_result: "DiffResult",  # type: ignore[name-defined]
+) -> None:
+    """Append diff result ke file log."""
+    from .differ import DiffResult
+
+    _ensure_dir(file_path)
+
+    record = {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "type": "diff",
+        "method": diff_result.method,
+        "url": diff_result.url,
+        "changes": {
+            "added": [
+                {"path": e.path, "value": e.new_value} for e in diff_result.added
+            ],
+            "removed": [
+                {"path": e.path, "value": e.old_value} for e in diff_result.removed
+            ],
+            "changed": [
+                {"path": e.path, "old": e.old_value, "new": e.new_value}
+                for e in diff_result.changed
+            ],
+        },
+        "has_changes": diff_result.has_changes,
+    }
+
+    if file_format == "json":
+        with open(file_path, "a", encoding="utf-8") as f:
+            f.write(json.dumps(record, ensure_ascii=False) + "\n")
+    else:
+        sep = "-" * 60
+        lines = [
+            f"\n{sep}",
+            f"[{record['timestamp']}] DIFF {diff_result.method} {diff_result.url}",
+        ]
+        if not diff_result.has_changes:
+            lines.append("  No changes detected")
+        else:
+            for e in diff_result.entries:
+                lines.append(f"  {e}")
+        lines.append(sep + "\n")
+        with open(file_path, "a", encoding="utf-8") as f:
+            f.write("\n".join(lines))

@@ -32,12 +32,25 @@ class ReqTraceConfig:
         Master switch. Set to False to disable all logging
         without removing the middleware. Useful for production.
         Defaults to True.
+
+    diff : bool
+        Auto-diff mode. When True, reqtrace automatically compares
+        each response against the previous response for the same
+        endpoint and displays the differences.
+        Defaults to False.
+
+    clear_key : str, optional
+        Keyboard shortcut to clear the terminal while the server
+        is running. Example: "c". Set to None to disable.
+        Defaults to "c".
     """
 
     output: OutputMode = "terminal"
     file_path: Optional[str] = None
     file_format: FileFormat = "json"
     enabled: bool = True
+    diff: bool = False
+    clear_key: Optional[str] = "c"
 
     def __post_init__(self) -> None:
         self._validate()
