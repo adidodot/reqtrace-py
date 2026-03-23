@@ -1,0 +1,47 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "reqtrace"
+version = "0.1.0"
+description = "Lightweight HTTP request/response logger and debugger for FastAPI"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+keywords = ["fastapi", "http", "logging", "debugging", "middleware", "api"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Topic :: Software Development :: Debuggers",
+    "Topic :: Internet :: WWW/HTTP :: HTTP Servers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+]
+dependencies = [
+    "starlette>=0.27.0",   # FastAPI is built on Starlette
+]
+
+[project.optional-dependencies]
+dev = [
+    "fastapi>=0.100.0",
+    "httpx>=0.24.0",       # untuk testing FastAPI
+    "pytest>=7.0.0",
+    "pytest-asyncio>=0.21.0",
+    "uvicorn>=0.22.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/adidodot/reqtrace"
+Issues   = "https://github.com/adidodot/reqtrace/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/reqtrace"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
