@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/logo.png" alt="reqtrace-py logo" width="280">
+</p>
+
 # reqtrace-py
 
 Lightweight HTTP request/response logger for Python web frameworks. Designed for developers who need clear, structured debug output without writing `print()` everywhere.
@@ -12,6 +16,7 @@ Lightweight HTTP request/response logger for Python web frameworks. Designed for
 - Filter log by route, method, or status code (whitelist & blacklist)
 - Press `c` to clear terminal while server is running
 - Authorization header auto-masking
+- Web UI log viewer via CLI (`reqtrace view`)
 
 ## Installation
 
@@ -54,6 +59,48 @@ rt = ReqTrace(output="both", file_path="logs/trace.json")
 # Disabled (useful for production)
 rt = ReqTrace(output="terminal", enabled=False)
 ```
+
+## Web UI Viewer
+
+Visualize your log file in a browser-based UI with real-time updates, filtering, search, and diff viewer.
+
+<p align="center">
+  <img src="assets/screenshot-ui.png" alt="reqtrace-py Web UI Viewer" width="900">
+</p>
+
+First, configure reqtrace to write to a file:
+
+```python
+rt = ReqTrace(output="file", file_path="logs/trace.json")
+# or both terminal and file
+rt = ReqTrace(output="both", file_path="logs/trace.json", diff=True)
+```
+
+Then open the viewer from your terminal:
+
+```bash
+reqtrace view logs/trace.json
+```
+
+The UI will open automatically at `http://localhost:8765`.
+
+```bash
+# Custom port
+reqtrace view logs/trace.json --port 8080
+
+# Don't open browser automatically
+reqtrace view logs/trace.json --no-browser
+```
+
+**UI features:**
+
+- Table view of all log entries, sorted newest first
+- Click any row to inspect full request/response detail
+- Resizable detail panel — drag the handle between table and detail
+- Filter by method (GET, POST, PUT, DELETE, DIFF) and status code (2xx–5xx)
+- Search by URL
+- Diff viewer — shows added, removed, and changed fields
+- Live updates via SSE — new entries appear automatically without refresh
 
 ## Filter
 
@@ -123,14 +170,6 @@ Diff symbols:
 - `+` — field or item added
 - `-` — field or item removed
 - `~` — value or type changed
-
-When there are no changes:
-
-```
-┌─ DIFF GET /users ────────────────────────────────────────────
-  No changes detected
-└──────────────────────────────────────────────────────────────
-```
 
 ## Terminal Output Example
 
@@ -213,6 +252,15 @@ Diff entries are written as a separate record with `"type": "diff"`:
 
 ## Changelog
 
+### v0.4.0
+
+- Web UI log viewer via `reqtrace view <file>` CLI command
+- Table layout with resizable detail panel
+- Real-time updates via SSE — new entries appear without refresh
+- Filter by method, status code, and URL search in the UI
+- Diff viewer in detail panel
+- Log entries sorted newest first
+
 ### v0.3.0
 
 - Filter log by route, method, and status code
@@ -234,8 +282,7 @@ Diff entries are written as a separate record with `"type": "diff"`:
 
 ## Roadmap
 
-- `v0.4.0` — Flask/Django support
-- `v0.4.0` — Web UI log viewer
+- `v0.5.0` — Flask/Django support
 
 ## License
 
