@@ -441,3 +441,64 @@ class TestWriter:
         path = str(tmp_path / "nested" / "dir" / "trace.json")
         write_log(path, "json", "GET", "/test", 200, 5.0)
         assert os.path.exists(path)
+
+
+# ---------------------------------------------------------------
+# CLI & Viewer
+# ---------------------------------------------------------------
+
+
+class TestViewer:
+
+    def test_read_logs_valid(self, tmp_path):
+        """_read_logs membaca NDJSON dengan benar."""
+        from reqtrace.viewer.server import _read_logs
+
+        path = str(tmp_path / "trace.json")
+        entries = [
+            {"method": "GET", "url": "/users", "status_code": 200, "latency_ms": 12.5},
+            {"method": "POST", "url": "/users", "status_code": 201, "latency_ms": 30.0},
+            {"type": "diff", "method": "GET", "url": "/users", "has_changes": True},
+        ]
+        with open(path, "w") as f:
+            for e in entries:
+                f.write(json.dumps(e) + "\n")
+        result = _read_logs(path)
+        assert len(result) == 3
+        assert result[0]["method"] == "GET"
+        assert result[2]["type"] == "diff"
+
+    def test_read_logs_empty_file(self, tmp_path):
+        """_read_logs mengembalikan list kosong jika file kosong."""
+        from reqtrace.viewer.server import _read_logs
+
+        path = str(tmp_path / "empty.json")
+        open(path, "w").close()
+        assert _read_logs(path) == []
+
+    def test_read_logs_file_not_found(self):
+        """_read_logs mengembalikan list kosong jika file tidak ada."""
+        from reqtrace.viewer.server import _read_logs
+
+        assert _read_logs("non_existent_file.json") == []
+
+    def test_read_logs_skips_invalid_json(self, tmp_path):
+        """_read_logs skip baris yang bukan valid JSON."""
+        from reqtrace.viewer.server import _read_logs
+
+        path = str(tmp_path / "trace.json")
+        with open(path, "w") as f:
+            f.write('{"method": "GET", "status_code": 200}\n')
+            f.write("this is not json\n")
+            f.write('{"method": "POST", "status_code": 201}\n')
+        result = _read_logs(path)
+        assert len(result) == 2
+
+    def test_static_index_exists(self):
+        """index.html tersedia di folder static."""
+        from pathlib import Path
+        import reqtrace.viewer.server as srv
+
+        static = Path(srv.__file__).parent / "static" / "index.html"
+        assert static.exists()
+        assert static.stat().st_size > 0

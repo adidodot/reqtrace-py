@@ -17,7 +17,7 @@ from reqtrace.middleware import ReqTraceMiddleware
 # -------------------------------------------------------------------
 
 # Mode 1: terminal + auto-diff (tanpa filter)
-rt = ReqTrace(output="terminal", diff=True)
+rt = ReqTrace(output="both", file_path="logs/reqtrace.json", diff=True)
 
 # Mode 2: blacklist — sembunyikan docs & semua 200
 # rt = ReqTrace(

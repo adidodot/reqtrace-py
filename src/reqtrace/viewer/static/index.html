@@ -1,0 +1,1127 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>reqtrace viewer</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600&family=Syne:wght@400;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --bg: #0a0a0f;
+        --surface: #111118;
+        --surface2: #16161f;
+        --border: #1e1e2e;
+        --border2: #252535;
+        --text: #e2e2f0;
+        --text-dim: #6b6b8a;
+        --text-muted: #3a3a55;
+        --accent: #7c6af7;
+        --accent-dim: #2d2860;
+        --green: #4ade80;
+        --yellow: #fbbf24;
+        --red: #f87171;
+        --magenta: #c084fc;
+        --cyan: #67e8f9;
+        --mono: "JetBrains Mono", monospace;
+        --sans: "Syne", sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      body {
+        background: var(--bg);
+        color: var(--text);
+        font-family: var(--mono);
+        font-size: 13px;
+        height: 100vh;
+        display: grid;
+        grid-template-rows: 48px 1fr;
+        overflow: hidden;
+      }
+
+      /* ── HEADER ── */
+      header {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 0 20px;
+        border-bottom: 1px solid var(--border);
+        background: var(--surface);
+        flex-shrink: 0;
+      }
+
+      .logo {
+        font-family: var(--sans);
+        font-weight: 800;
+        font-size: 15px;
+        color: var(--accent);
+        letter-spacing: -0.5px;
+        flex-shrink: 0;
+      }
+      .logo span {
+        color: var(--text-dim);
+        font-weight: 400;
+      }
+
+      .file-badge {
+        font-size: 11px;
+        color: var(--text-dim);
+        background: var(--surface2);
+        border: 1px solid var(--border2);
+        padding: 2px 8px;
+        border-radius: 4px;
+        max-width: 360px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .spacer {
+        flex: 1;
+      }
+
+      .header-right {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+      }
+
+      .count-badge {
+        font-size: 11px;
+        color: var(--text-dim);
+      }
+
+      .live-badge {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 11px;
+        color: var(--text-dim);
+      }
+
+      .live-dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: var(--green);
+        animation: pulse 2s infinite;
+      }
+      .live-dot.dead {
+        background: var(--text-muted);
+        animation: none;
+      }
+
+      @keyframes pulse {
+        0%,
+        100% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.3;
+        }
+      }
+
+      /* ── MAIN: sidebar + content ── */
+      .app-body {
+        display: grid;
+        grid-template-columns: 200px 1fr;
+        overflow: hidden;
+      }
+
+      /* ── SIDEBAR (filters only) ── */
+      .sidebar {
+        border-right: 1px solid var(--border);
+        background: var(--surface);
+        display: flex;
+        flex-direction: column;
+        overflow-y: auto;
+        scrollbar-width: thin;
+        scrollbar-color: var(--border2) transparent;
+      }
+
+      .sidebar-section {
+        padding: 12px;
+        border-bottom: 1px solid var(--border);
+      }
+
+      .sidebar-label {
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 1.5px;
+        color: var(--text-muted);
+        margin-bottom: 8px;
+        font-family: var(--sans);
+        font-weight: 600;
+      }
+
+      .search-input {
+        width: 100%;
+        background: var(--surface2);
+        border: 1px solid var(--border2);
+        border-radius: 4px;
+        color: var(--text);
+        font-family: var(--mono);
+        font-size: 12px;
+        padding: 6px 8px;
+        outline: none;
+        transition: border-color 0.15s;
+      }
+      .search-input:focus {
+        border-color: var(--accent-dim);
+      }
+      .search-input::placeholder {
+        color: var(--text-muted);
+      }
+
+      .filter-group {
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+      }
+
+      .filter-chip {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 5px 8px;
+        border-radius: 4px;
+        cursor: pointer;
+        color: var(--text-dim);
+        font-size: 12px;
+        transition:
+          background 0.1s,
+          color 0.1s;
+        user-select: none;
+      }
+      .filter-chip:hover {
+        background: var(--surface2);
+        color: var(--text);
+      }
+      .filter-chip.active {
+        background: var(--accent-dim);
+        color: var(--text);
+      }
+
+      .chip-dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        flex-shrink: 0;
+      }
+
+      .chip-count {
+        margin-left: auto;
+        font-size: 10px;
+        color: var(--text-muted);
+      }
+
+      /* ── RIGHT PANE: table + detail ── */
+      .right-pane {
+        display: grid;
+        grid-template-rows: 1fr 1px 320px;
+        overflow: hidden;
+      }
+
+      .right-pane.collapsed {
+        grid-template-rows: 1fr 0px 0px;
+      }
+
+      /* ── LOG TABLE ── */
+      .table-wrap {
+        overflow-y: auto;
+        scrollbar-width: thin;
+        scrollbar-color: var(--border2) transparent;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        table-layout: fixed;
+      }
+
+      thead {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        background: var(--surface);
+      }
+
+      thead tr {
+        border-bottom: 1px solid var(--border2);
+      }
+
+      th {
+        padding: 8px 12px;
+        text-align: left;
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 1.2px;
+        color: var(--text-muted);
+        font-family: var(--sans);
+        font-weight: 600;
+        white-space: nowrap;
+      }
+
+      th:nth-child(1) {
+        width: 72px;
+      } /* Method */
+      th:nth-child(2) {
+        width: 52px;
+      } /* Status */
+      th:nth-child(3) {
+      } /* URL */
+      th:nth-child(4) {
+        width: 72px;
+      } /* Latency */
+      th:nth-child(5) {
+        width: 88px;
+      } /* Time */
+
+      tbody tr {
+        border-bottom: 1px solid var(--border);
+        cursor: pointer;
+        transition: background 0.1s;
+      }
+
+      tbody tr:hover {
+        background: var(--surface2);
+      }
+
+      tbody tr.selected {
+        background: var(--accent-dim);
+        border-left: 2px solid var(--accent);
+      }
+
+      tbody tr.diff-row {
+        border-left: 2px solid var(--yellow);
+      }
+      tbody tr.diff-row.selected {
+        background: #1e1a08;
+        border-left: 2px solid var(--yellow);
+      }
+
+      tbody tr.new-row {
+        animation: fadeIn 0.25s ease-out;
+      }
+
+      @keyframes fadeIn {
+        from {
+          opacity: 0;
+          background: #1a1630;
+        }
+        to {
+          opacity: 1;
+        }
+      }
+
+      td {
+        padding: 9px 12px;
+        font-size: 12px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        vertical-align: middle;
+      }
+
+      .method-badge {
+        display: inline-block;
+        font-size: 10px;
+        font-weight: 600;
+        padding: 2px 6px;
+        border-radius: 3px;
+        background: var(--surface2);
+        color: var(--cyan);
+        letter-spacing: 0.3px;
+      }
+      .method-badge.POST {
+        color: var(--green);
+      }
+      .method-badge.PUT {
+        color: var(--yellow);
+      }
+      .method-badge.DELETE {
+        color: var(--red);
+      }
+      .method-badge.PATCH {
+        color: var(--magenta);
+      }
+      .method-badge.DIFF {
+        color: var(--yellow);
+        background: #2a2010;
+        font-size: 9px;
+      }
+
+      .status-text {
+        font-weight: 500;
+      }
+      .s2xx {
+        color: var(--green);
+      }
+      .s3xx {
+        color: var(--yellow);
+      }
+      .s4xx {
+        color: var(--red);
+      }
+      .s5xx {
+        color: var(--magenta);
+      }
+
+      td.url-cell {
+        color: var(--text);
+      }
+      td.url-cell.diff-url {
+        color: var(--yellow);
+        font-size: 11px;
+      }
+      td.latency-cell {
+        color: var(--text-dim);
+        text-align: right;
+      }
+      td.time-cell {
+        color: var(--text-muted);
+        font-size: 11px;
+      }
+
+      /* ── RESIZE HANDLE ── */
+      .resize-handle {
+        background: var(--border);
+        cursor: row-resize;
+        transition: background 0.15s;
+        position: relative;
+        z-index: 20;
+      }
+      .resize-handle:hover {
+        background: var(--accent);
+      }
+
+      /* ── DETAIL PANEL ── */
+      .detail-panel {
+        background: var(--surface);
+        border-top: 1px solid var(--border);
+        overflow-y: auto;
+        scrollbar-width: thin;
+        scrollbar-color: var(--border2) transparent;
+      }
+
+      .detail-inner {
+        padding: 20px 24px;
+      }
+
+      .empty-state {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        height: 100%;
+        gap: 6px;
+        color: var(--text-muted);
+        padding: 24px;
+      }
+      .empty-icon {
+        font-size: 28px;
+        opacity: 0.35;
+        margin-bottom: 2px;
+      }
+      .empty-state p {
+        font-size: 12px;
+      }
+
+      /* ── DETAIL CONTENT ── */
+      .detail-header {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 16px;
+        padding-bottom: 14px;
+        border-bottom: 1px solid var(--border);
+      }
+
+      .detail-method {
+        font-family: var(--sans);
+        font-weight: 700;
+        font-size: 16px;
+        color: var(--cyan);
+      }
+      .detail-method.POST {
+        color: var(--green);
+      }
+      .detail-method.PUT {
+        color: var(--yellow);
+      }
+      .detail-method.DELETE {
+        color: var(--red);
+      }
+
+      .detail-url {
+        font-size: 15px;
+        color: var(--text);
+        flex: 1;
+      }
+      .detail-status {
+        font-family: var(--sans);
+        font-weight: 700;
+        font-size: 20px;
+      }
+
+      .detail-meta {
+        display: flex;
+        gap: 24px;
+        margin-bottom: 16px;
+      }
+      .meta-item {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+      .meta-label {
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        color: var(--text-muted);
+      }
+      .meta-value {
+        font-size: 12px;
+        color: var(--text-dim);
+      }
+
+      .section-title {
+        font-family: var(--sans);
+        font-size: 10px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 1.5px;
+        color: var(--text-muted);
+        margin-bottom: 6px;
+        margin-top: 16px;
+      }
+      .section-title:first-of-type {
+        margin-top: 0;
+      }
+
+      .code-block {
+        background: var(--surface2);
+        border: 1px solid var(--border);
+        border-radius: 5px;
+        padding: 10px 12px;
+        font-size: 12px;
+        line-height: 1.6;
+        color: var(--text-dim);
+        overflow-x: auto;
+        white-space: pre;
+        scrollbar-width: thin;
+        max-height: 160px;
+        overflow-y: auto;
+      }
+
+      .empty-body {
+        color: var(--text-muted);
+        font-style: italic;
+        font-size: 12px;
+        padding: 4px 0;
+      }
+
+      /* ── DIFF DETAIL ── */
+      .diff-header {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 14px;
+        padding-bottom: 14px;
+        border-bottom: 1px solid var(--border);
+      }
+      .diff-title {
+        font-family: var(--sans);
+        font-weight: 700;
+        font-size: 16px;
+        color: var(--yellow);
+      }
+
+      .diff-summary {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 14px;
+      }
+      .diff-stat {
+        font-size: 11px;
+        padding: 3px 10px;
+        border-radius: 4px;
+      }
+      .diff-stat.added {
+        background: #0d2818;
+        color: var(--green);
+      }
+      .diff-stat.removed {
+        background: #2a0d0d;
+        color: var(--red);
+      }
+      .diff-stat.changed {
+        background: #2a2010;
+        color: var(--yellow);
+      }
+
+      .diff-table {
+        width: 100%;
+        border-collapse: collapse;
+        border-radius: 5px;
+        overflow: hidden;
+        border: 1px solid var(--border);
+      }
+      .diff-table td {
+        padding: 7px 12px;
+        font-size: 12px;
+        border-bottom: 1px solid var(--border);
+        vertical-align: middle;
+      }
+      .diff-table tr:last-child td {
+        border-bottom: none;
+      }
+      .diff-table tr.added {
+        background: #0a1f12;
+      }
+      .diff-table tr.removed {
+        background: #1f0a0a;
+      }
+      .diff-table tr.changed {
+        background: #1f1a0a;
+      }
+
+      .diff-sym {
+        font-weight: 700;
+        width: 20px;
+      }
+      .diff-sym.added {
+        color: var(--green);
+      }
+      .diff-sym.removed {
+        color: var(--red);
+      }
+      .diff-sym.changed {
+        color: var(--yellow);
+      }
+
+      .diff-path {
+        color: var(--text);
+        width: 40%;
+      }
+      .diff-val {
+        color: var(--text-dim);
+        font-size: 11px;
+      }
+      .diff-val .old {
+        color: var(--red);
+        text-decoration: line-through;
+        margin-right: 8px;
+      }
+      .diff-val .new {
+        color: var(--green);
+      }
+
+      .no-changes {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        color: var(--green);
+        font-size: 13px;
+        padding: 12px;
+      }
+
+      /* scrollbar webkit */
+      ::-webkit-scrollbar {
+        width: 4px;
+        height: 4px;
+      }
+      ::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      ::-webkit-scrollbar-thumb {
+        background: var(--border2);
+        border-radius: 2px;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- HEADER -->
+    <header>
+      <div class="logo">reqtrace<span>-py</span></div>
+      <div class="file-badge" id="fileBadge">—</div>
+      <div class="spacer"></div>
+      <div class="header-right">
+        <div class="count-badge"><span id="totalCount">0</span> entries</div>
+        <div class="live-badge">
+          <div class="live-dot" id="liveDot"></div>
+          <span id="liveLabel">live</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- BODY -->
+    <div class="app-body">
+      <!-- SIDEBAR: filters -->
+      <aside class="sidebar">
+        <div class="sidebar-section">
+          <div class="sidebar-label">Search</div>
+          <input
+            class="search-input"
+            type="text"
+            id="searchInput"
+            placeholder="Filter by URL..."
+          />
+        </div>
+
+        <div class="sidebar-section">
+          <div class="sidebar-label">Method</div>
+          <div class="filter-group">
+            <div class="filter-chip active" data-method="ALL">
+              <span class="chip-dot" style="background: var(--text-dim)"></span
+              >All
+              <span class="chip-count" id="cntALL"></span>
+            </div>
+            <div class="filter-chip" data-method="GET">
+              <span class="chip-dot" style="background: var(--cyan)"></span>GET
+              <span class="chip-count" id="cntGET"></span>
+            </div>
+            <div class="filter-chip" data-method="POST">
+              <span class="chip-dot" style="background: var(--green)"></span
+              >POST
+              <span class="chip-count" id="cntPOST"></span>
+            </div>
+            <div class="filter-chip" data-method="PUT">
+              <span class="chip-dot" style="background: var(--yellow)"></span
+              >PUT
+              <span class="chip-count" id="cntPUT"></span>
+            </div>
+            <div class="filter-chip" data-method="DELETE">
+              <span class="chip-dot" style="background: var(--red)"></span
+              >DELETE
+              <span class="chip-count" id="cntDELETE"></span>
+            </div>
+            <div class="filter-chip" data-method="DIFF">
+              <span class="chip-dot" style="background: var(--yellow)"></span
+              >DIFF
+              <span class="chip-count" id="cntDIFF"></span>
+            </div>
+          </div>
+        </div>
+
+        <div class="sidebar-section">
+          <div class="sidebar-label">Status</div>
+          <div class="filter-group">
+            <div class="filter-chip active" data-status="ALL">
+              <span class="chip-dot" style="background: var(--text-dim)"></span
+              >All
+            </div>
+            <div class="filter-chip" data-status="2xx">
+              <span class="chip-dot" style="background: var(--green)"></span>2xx
+            </div>
+            <div class="filter-chip" data-status="3xx">
+              <span class="chip-dot" style="background: var(--yellow)"></span
+              >3xx
+            </div>
+            <div class="filter-chip" data-status="4xx">
+              <span class="chip-dot" style="background: var(--red)"></span>4xx
+            </div>
+            <div class="filter-chip" data-status="5xx">
+              <span class="chip-dot" style="background: var(--magenta)"></span
+              >5xx
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      <!-- RIGHT PANE -->
+      <div class="right-pane" id="rightPane">
+        <!-- LOG TABLE -->
+        <div class="table-wrap" id="tableWrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Method</th>
+                <th>Status</th>
+                <th>URL</th>
+                <th style="text-align: right">Latency</th>
+                <th>Time</th>
+              </tr>
+            </thead>
+            <tbody id="logTableBody"></tbody>
+          </table>
+        </div>
+
+        <!-- RESIZE HANDLE -->
+        <div class="resize-handle" id="resizeHandle"></div>
+
+        <!-- DETAIL PANEL -->
+        <div class="detail-panel" id="detailPanel">
+          <div class="detail-inner" id="detailContent">
+            <div class="empty-state">
+              <div class="empty-icon">↑</div>
+              <p>Select a row above to inspect</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      // ── STATE ──
+      let logs = [];
+      let selectedIdx = null;
+      let methodFilter = "ALL";
+      let statusFilter = "ALL";
+      let searchQuery = "";
+
+      // ── INIT ──
+      async function init() {
+        await loadInfo();
+        await loadLogs();
+        connectSSE();
+        setupResize();
+      }
+
+      async function loadInfo() {
+        try {
+          const r = await fetch("/api/info");
+          const d = await r.json();
+          document.getElementById("fileBadge").textContent = d.file;
+        } catch (e) {}
+      }
+
+      async function loadLogs() {
+        try {
+          const r = await fetch("/api/logs");
+          logs = await r.json();
+          renderTable();
+          updateCounts();
+        } catch (e) {}
+      }
+
+      // ── SSE ──
+      function connectSSE() {
+        const es = new EventSource("/api/stream");
+        es.onopen = () => updateLive(true);
+        es.onerror = () => {
+          updateLive(false);
+          es.close();
+          setTimeout(connectSSE, 3000);
+        };
+        es.onmessage = (e) => {
+          try {
+            logs.push(JSON.parse(e.data));
+            renderTable(true);
+            updateCounts();
+          } catch (err) {}
+        };
+      }
+
+      function updateLive(alive) {
+        document.getElementById("liveDot").className =
+          "live-dot" + (alive ? "" : " dead");
+        document.getElementById("liveLabel").textContent = alive
+          ? "live"
+          : "offline";
+      }
+
+      // ── FILTER ──
+      function getFiltered() {
+        return [...logs].reverse().filter((log) => {
+          const isDiff = log.type === "diff";
+          const method = isDiff ? "DIFF" : log.method;
+          const url = log.url || "";
+
+          if (methodFilter !== "ALL" && method !== methodFilter) return false;
+          if (statusFilter !== "ALL") {
+            if (isDiff) return false;
+            if (Math.floor(log.status_code / 100) + "xx" !== statusFilter)
+              return false;
+          }
+          if (
+            searchQuery &&
+            !url.toLowerCase().includes(searchQuery.toLowerCase())
+          )
+            return false;
+          return true;
+        });
+      }
+
+      // ── RENDER TABLE ──
+      function renderTable(markLast = false) {
+        const filtered = getFiltered();
+        const tbody = document.getElementById("logTableBody");
+        tbody.innerHTML = "";
+
+        filtered.forEach((log, fi) => {
+          const isDiff = log.type === "diff";
+          const method = isDiff ? "DIFF" : log.method;
+          const url = isDiff ? `${log.method} ${log.url}` : log.url || "";
+          const realIdx = logs.indexOf(log);
+          const isNew = markLast && fi === filtered.length - 1;
+          const isSel = realIdx === selectedIdx;
+
+          const tr = document.createElement("tr");
+          tr.className = [
+            isDiff ? "diff-row" : "",
+            isSel ? "selected" : "",
+            isNew ? "new-row" : "",
+          ]
+            .filter(Boolean)
+            .join(" ");
+          tr.dataset.idx = realIdx;
+
+          const statusHtml = isDiff
+            ? `<td>—</td>`
+            : `<td><span class="status-text ${statusClass(log.status_code)}">${log.status_code}</span></td>`;
+
+          const latencyHtml = isDiff
+            ? `<td class="latency-cell">—</td>`
+            : `<td class="latency-cell">${log.latency_ms}ms</td>`;
+
+          tr.innerHTML = `
+      <td><span class="method-badge ${method}">${method}</span></td>
+      ${statusHtml}
+      <td class="url-cell ${isDiff ? "diff-url" : ""}">${escHtml(url)}</td>
+      ${latencyHtml}
+      <td class="time-cell">${formatTime(log.timestamp)}</td>
+    `;
+
+          tr.addEventListener("click", () => selectLog(realIdx));
+          tbody.appendChild(tr);
+        });
+      }
+
+      // ── SELECT ROW ──
+      function selectLog(idx) {
+        selectedIdx = idx;
+        renderTable();
+        renderDetail(logs[idx]);
+      }
+
+      // ── DETAIL ──
+      function renderDetail(log) {
+        const el = document.getElementById("detailContent");
+        if (!log) return;
+        el.innerHTML =
+          log.type === "diff" ? buildDiffDetail(log) : buildLogDetail(log);
+      }
+
+      function buildLogDetail(log) {
+        const headers = log.request_headers
+          ? Object.entries(log.request_headers)
+              .filter(([k]) =>
+                [
+                  "content-type",
+                  "authorization",
+                  "accept",
+                  "user-agent",
+                ].includes(k.toLowerCase()),
+              )
+              .map(([k, v]) => {
+                if (k.toLowerCase() === "authorization")
+                  v = v.substring(0, 20) + "...";
+                return `${k}: ${v}`;
+              })
+              .join("\n") || "(none shown)"
+          : "(empty)";
+
+        const reqBody = log.request_body
+          ? JSON.stringify(log.request_body, null, 2)
+          : null;
+        const resBody = log.response_body
+          ? JSON.stringify(log.response_body, null, 2)
+          : null;
+
+        return `
+    <div class="detail-header">
+      <span class="detail-method ${log.method}">${log.method}</span>
+      <span class="detail-url">${escHtml(log.url)}</span>
+      <span class="detail-status ${statusClass(log.status_code)}">${log.status_code}</span>
+    </div>
+    <div class="detail-meta">
+      <div class="meta-item">
+        <span class="meta-label">Latency</span>
+        <span class="meta-value">${log.latency_ms}ms</span>
+      </div>
+      <div class="meta-item">
+        <span class="meta-label">Timestamp</span>
+        <span class="meta-value">${formatTimeFull(log.timestamp)}</span>
+      </div>
+    </div>
+    <div class="section-title">Request Headers</div>
+    <div class="code-block">${escHtml(headers)}</div>
+    <div class="section-title">Request Body</div>
+    ${reqBody ? `<div class="code-block">${escHtml(reqBody)}</div>` : '<div class="empty-body">(empty)</div>'}
+    <div class="section-title">Response Body</div>
+    ${resBody ? `<div class="code-block">${escHtml(resBody)}</div>` : '<div class="empty-body">(empty)</div>'}
+  `;
+      }
+
+      function buildDiffDetail(log) {
+        const c = log.changes || { added: [], removed: [], changed: [] };
+
+        let rows = "";
+        if (!log.has_changes) {
+          rows = `<div class="no-changes">✓ No changes detected</div>`;
+        } else {
+          c.changed.forEach((e) => {
+            rows += `<tr class="changed">
+        <td class="diff-sym changed">~</td>
+        <td class="diff-path">${escHtml(e.path)}</td>
+        <td class="diff-val"><span class="old">${escHtml(JSON.stringify(e.old))}</span><span class="new">${escHtml(JSON.stringify(e.new))}</span></td>
+      </tr>`;
+          });
+          c.added.forEach((e) => {
+            rows += `<tr class="added">
+        <td class="diff-sym added">+</td>
+        <td class="diff-path">${escHtml(e.path)}</td>
+        <td class="diff-val"><span class="new">${escHtml(JSON.stringify(e.value))}</span></td>
+      </tr>`;
+          });
+          c.removed.forEach((e) => {
+            rows += `<tr class="removed">
+        <td class="diff-sym removed">-</td>
+        <td class="diff-path">${escHtml(e.path)}</td>
+        <td class="diff-val"><span class="old">${escHtml(JSON.stringify(e.value))}</span></td>
+      </tr>`;
+          });
+        }
+
+        return `
+    <div class="diff-header">
+      <span class="diff-title">DIFF</span>
+      <span style="color:var(--text-dim);font-size:14px">${escHtml(log.method + " " + log.url)}</span>
+    </div>
+    <div class="diff-summary">
+      <span class="diff-stat added">+${c.added.length} added</span>
+      <span class="diff-stat removed">-${c.removed.length} removed</span>
+      <span class="diff-stat changed">~${c.changed.length} changed</span>
+    </div>
+    ${
+      log.has_changes
+        ? `<table class="diff-table"><tbody>${rows}</tbody></table>`
+        : rows
+    }
+  `;
+      }
+
+      // ── COUNTS ──
+      function updateCounts() {
+        document.getElementById("totalCount").textContent = logs.length;
+        ["GET", "POST", "PUT", "DELETE"].forEach((m) => {
+          const el = document.getElementById("cnt" + m);
+          if (el)
+            el.textContent =
+              logs.filter((l) => l.method === m && l.type !== "diff").length ||
+              "";
+        });
+        const d = document.getElementById("cntDIFF");
+        if (d)
+          d.textContent = logs.filter((l) => l.type === "diff").length || "";
+        const a = document.getElementById("cntALL");
+        if (a) a.textContent = logs.length || "";
+      }
+
+      // ── FILTER EVENTS ──
+      document.querySelector(".sidebar").addEventListener("click", (e) => {
+        const cm = e.target.closest("[data-method]");
+        const cs = e.target.closest("[data-status]");
+        if (cm) {
+          methodFilter = cm.dataset.method;
+          document
+            .querySelectorAll("[data-method]")
+            .forEach((c) => c.classList.remove("active"));
+          cm.classList.add("active");
+          renderTable();
+        }
+        if (cs) {
+          statusFilter = cs.dataset.status;
+          document
+            .querySelectorAll("[data-status]")
+            .forEach((c) => c.classList.remove("active"));
+          cs.classList.add("active");
+          renderTable();
+        }
+      });
+
+      document.getElementById("searchInput").addEventListener("input", (e) => {
+        searchQuery = e.target.value;
+        renderTable();
+      });
+
+      // ── RESIZE HANDLE ──
+      function setupResize() {
+        const handle = document.getElementById("resizeHandle");
+        const pane = document.getElementById("rightPane");
+        const detail = document.getElementById("detailPanel");
+        let dragging = false;
+        let startY, startH;
+
+        handle.addEventListener("mousedown", (e) => {
+          dragging = true;
+          startY = e.clientY;
+          startH = detail.getBoundingClientRect().height;
+          document.body.style.userSelect = "none";
+          document.body.style.cursor = "row-resize";
+        });
+
+        document.addEventListener("mousemove", (e) => {
+          if (!dragging) return;
+          const delta = startY - e.clientY;
+          const newH = Math.max(
+            120,
+            Math.min(startH + delta, window.innerHeight - 200),
+          );
+          pane.style.gridTemplateRows = `1fr 1px ${newH}px`;
+        });
+
+        document.addEventListener("mouseup", () => {
+          dragging = false;
+          document.body.style.userSelect = "";
+          document.body.style.cursor = "";
+        });
+      }
+
+      // ── UTILS ──
+      function statusClass(code) {
+        if (code < 300) return "s2xx";
+        if (code < 400) return "s3xx";
+        if (code < 500) return "s4xx";
+        return "s5xx";
+      }
+
+      function formatTime(ts) {
+        if (!ts) return "";
+        try {
+          return new Date(ts).toLocaleTimeString("en-GB");
+        } catch {
+          return ts;
+        }
+      }
+
+      function formatTimeFull(ts) {
+        if (!ts) return "";
+        try {
+          return new Date(ts).toLocaleString();
+        } catch {
+          return ts;
+        }
+      }
+
+      function escHtml(s) {
+        return String(s)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;");
+      }
+
+      init();
+    </script>
+  </body>
+</html>
